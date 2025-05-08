@@ -6,8 +6,16 @@ const { getConfiguration } = require('./utils');
 const { writeTestFiles } = require('./write-to-file');
 const { processGeneratedTestFiles } = require('./javafile-compile');
 
+function getAIInfo() {
+    return {
+      "ai": "DeepSeek Chat",  // 我使用的AI模型
+      "apikey": "这里需填写你的apikey",  // 请在此处填写您的API密钥
+      "jar包": "相关配置"  // 相关配置信息
+    };
+}
+  
 
-async function generateTest(filePath, selectedText,userQuestion) {
+async function generateTest(filePath, selectedText,userQuestion,Back_require) {
     // 简单提取方法名
 	const methodNameMatch = selectedText.match(/(?:public|private|protected)?\s+\w[\w<>\[\]]*\s+(\w+)\s*\(.*?\)/);
 	const targetMethod = methodNameMatch ? methodNameMatch[1] : 'UnknownMethod';     //用到的是原版本的签名
@@ -108,5 +116,7 @@ async function generateTest(filePath, selectedText,userQuestion) {
 }
 
 module.exports = {
-    generateTest
+    generateTest,
+    getAIInfo
+
 };

@@ -7,7 +7,7 @@ const fs = require('fs');
 
 const pluginRoot = __dirname; // 获取当前 JS 文件的目录
 
-async function generatePythonTest(pythonFilePath, selectedText,userQuestion) {
+async function generatePythonTest(pythonFilePath, selectedText,userQuestion,Back_require) {
     // 提取函数/方法名
 	const functionNameMatch = selectedText.match(/def\s+(\w+)\s*\(.*?\)/);
 	const targetMethod = functionNameMatch ? functionNameMatch[1] : '未知函数';   //此处原本是functionName
@@ -54,7 +54,7 @@ async function generatePythonTest(pythonFilePath, selectedText,userQuestion) {
         });
         console.log(`\n===================================================\n`);
 
-        return test;
+        return [test];
 
     } catch (error) {
         console.error('发生错误:', error);

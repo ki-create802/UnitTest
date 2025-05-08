@@ -3,6 +3,7 @@
 const vscode = require('vscode');
 const { generateTest } = require('./javaGenerator');
 const { generatePythonTest } = require('./pyGenerator');
+const { getAIInfo }=require('./javaGenerator')
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -15,275 +16,157 @@ console.log('🔧 Extension loaded');
  */
 
 let chatPanel = null; // 在文件顶部定义一个全局变量来保存 WebviewPanel
+let Back_require=null;   //后端需要的json数据
+
+const createChatPanel = () => {
+    if (chatPanel) {
+        // 如果面板已存在，直接显示并返回
+        chatPanel.reveal(vscode.ViewColumn.Two);
+        return chatPanel;
+    }
+    // 创建新面板并固定在右侧
+    chatPanel = vscode.window.createWebviewPanel(
+        'unitTestChat',
+        '单元测试问答助手',
+        vscode.ViewColumn.Two,
+        {
+            enableScripts: true,
+            retainContextWhenHidden: true // ✅ 保持面板状态
+        }
+    );
+    // 面板关闭时清理引用
+    chatPanel.onDidDispose(() => {
+        chatPanel = null;
+    });
+
+    return chatPanel;
+};
+
 
 function activate(context) {
-	
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "my-chattester" is now active!');
-	const createChatPanel = () => {
-        if (chatPanel) {
-            // 如果面板已存在，直接显示并返回
-            chatPanel.reveal(vscode.ViewColumn.Two);
-            return chatPanel;
-        }
 
-        // 创建新面板并固定在右侧
-        chatPanel = vscode.window.createWebviewPanel(
-            'unitTestChat',
-            '单元测试问答助手',
-            vscode.ViewColumn.Two,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true // ✅ 保持面板状态
-            }
-        );
+	//TODO：前端写一个界面让用户选择用哪种方法
 
-        // 面板关闭时清理引用
-        chatPanel.onDidDispose(() => {
-            chatPanel = null;
+	let a=getAIInfo();  //获取后端给的json数据（后端需要的项目及解释）
+
+	//a={
+	// 	"ai": "使用的AI模型",  
+	// 	"apikey": "这里需填写你的apikey",  
+	// 	"jar包": "配置信息"  
+	//   }
+
+	//根据后端给的json数据，写前端的配置界面。然后根据用户填写的内容返回一个如下的json数据
+
+	//a={
+	// 	"ai": "DeepSeek",  
+	// 	"apikey": "1234567",  
+	// 	"jar包": "hwkdgquegdo"  
+	//   }
+
+
+
+
+    console.log('Congratulations, your extension "my-chattester" is now active!');
+    
+    const disposables = [
+        // Java测试命令
+        vscode.commands.registerCommand('my-chattester.runJavaTest', async () => {
+            await handleTestGeneration(context, generateTest, Back_require);
+        }),
+        
+        // Python测试命令
+        vscode.commands.registerCommand('my-chattester.runPythonTest', async () => {
+            await handleTestGeneration(context,  generatePythonTest,Back_require);
+        })
+    ];
+    
+    // 批量注册
+    disposables.forEach(d => context.subscriptions.push(d));
+}
+
+// 统一测试命令处理函数
+async function handleTestGeneration(context, generatorFunction,Back_require) {
+    // 显示命令已触发
+    vscode.window.showInformationMessage(`测试生成命令已触发！`);
+    
+    // 检查是否有活跃的编辑器且当前文件是目标语言文件
+    const editor = vscode.window.activeTextEditor;
+    if (!editor ) {
+        vscode.window.showErrorMessage(`请打开文件`);
+        return;
+    }
+
+    // 获取选中的代码
+    const selection = editor.selection;
+    const selectedText = editor.document.getText(selection).trim();
+    if (!selectedText) {
+        vscode.window.showErrorMessage(`请先选中一个方法/函数代码段`);
+        return;
+    }
+
+
+    // 显示进度通知
+    await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: `正在生成测试...`,
+        cancellable: true
+    }, async (progress, token) => {
+        // 取消操作监听
+        token.onCancellationRequested(() => {
+            vscode.window.showInformationMessage('用户取消了操作');
         });
 
-        return chatPanel;
-    };
+        try {
+            let userQuestion = "";
+            const modelReply = await generatorFunction(editor.document.uri.fsPath, selectedText, userQuestion, Back_require);
+            vscode.window.showInformationMessage(`成功生成测试用例！`);
 
-	const disposables = [
-		//java测试命令
-        vscode.commands.registerCommand('my-chattester.runJavaTest', async () => {
-			// The code you place here will be executed every time your command is executed
-			vscode.window.showInformationMessage('Java测试生成命令已触发！');
-			//检查是否有活跃的文本编辑器 (activeTextEditor)以及当前文件是否为 Java 文件 
-			const editor = vscode.window.activeTextEditor;
-			if (!editor || editor.document.languageId !== 'java') {
-				vscode.window.showErrorMessage('请打开Java文件');
-				return;
-			}
-	
-			// 获取选中的代码
-			const selection = editor.selection;
-			const selectedText = editor.document.getText(selection).trim();
-			if (!selectedText) {
-				vscode.window.showErrorMessage('请先选中一个 Java 方法代码段');
-				return;
-			}
+            const panel = createChatPanel();
+            panel.webview.html = getWebviewContent();
 
-			
-			//进度反馈与任务执行
-			vscode.window.withProgress({
-				location: vscode.ProgressLocation.Notification,
-				//title: `正在为 ${methodSignature} 生成测试...`,
-				title: `正在为生成测试...`,
-				cancellable: true
-			}, async (progress, token) => {
-				// 取消操作监听
-				token.onCancellationRequested(() => {
-					vscode.window.showInformationMessage('用户取消了操作');
-				});
-	
-				try {
-					let userQuestion="";
-					const modelReply=await generateTest(editor.document.uri.fsPath, selectedText,userQuestion);  //
-					
-					
-					// 模型生成完毕后打开 Webview 聊天面板
-					// const panel = vscode.window.createWebviewPanel(
-					// 	'unitTestChat',
-					// 	'单元测试问答助手',
-					// 	vscode.ViewColumn.Two,
-					// 	{ enableScripts: true }
-					// );
-					const panel = createChatPanel();
+            panel.webview.onDidReceiveMessage(async (message) => {
+                if (message.command === 'askModel') {
+                    const userQuestion = message.text;
+                    const modelReply = await generatorFunction(editor.document.uri.fsPath, selectedText, userQuestion,Back_require);
+                    
+                    const formattedResponse = modelReply.map((test, index) => {
+                            return `### 测试用例 ${index + 1}\n\n\`\`\`\n${test}\n\`\`\``;
+                        }).join('\n\n---\n\n')
 
+                    
+                    panel.webview.postMessage({ 
+                        command: 'reply', 
+                        text: `已为您生成以下单元测试：\n\n${formattedResponse}`
+                    });
+                }
+            });
 
-					panel.webview.html = getWebviewContent();
+            // 初始显示生成的测试用例
+            const formattedTests = modelReply.map((test, index) => {
+                    return `### 测试用例 ${index + 1}\n\n\`\`\`\n${test}\n\`\`\``;
+                }).join('\n\n---\n\n')
 
-					panel.webview.onDidReceiveMessage(async (message) => {
-						console.log("收到消息：", message);
-						if (message.command === 'askModel') {
-							const userQuestion = message.text;
-							const modelReply = await generateTest(editor.document.uri.fsPath, selectedText,userQuestion);
-							console.log("💬 模型回复内容：", modelReply); // 加上这一行
-							//panel.webview.postMessage({ command: 'reply', text: modelReply });  //原来
+            panel.webview.postMessage({
+                command: 'reply',
+                text: `已为您生成以下单元测试：\n\n${formattedTests}`
+            });
 
-							//修改
-							//将测试用例数组转换为 Markdown 格式的字符串
-							// const tests=[
-							// 	"import static org.junit.jupiter.api.Assertions.assertEquals;\nimport org.junit.jupiter.api.Test;\n\npublic class add_test1_Test {\n\n    @Test\n    public void testAddPositiveNumbers() {\n        double result = Calculator.add(5.5, 4.5);\n        assertEquals(10.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddNegativeNumbers() {\n        double result = Calculator.add(-3.2, -1.8);\n        assertEquals(-5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddMixedNumbers() {\n        double result = Calculator.add(7.3, -2.3);\n        assertEquals(5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddZero() {\n        double result = Calculator.add(0.0, 0.0);\n        assertEquals(0.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddLargeNumbers() {\n        double result = Calculator.add(1.0E10, 2.0E10);\n        assertEquals(3.0E10, result, 0.0001);\n    }\n}",
-							// 	"import static org.junit.jupiter.api.Assertions.assertEquals;\nimport org.junit.jupiter.api.Test;\n\npublic class add_test2_Test {\n\n    @Test\n    public void testAddDecimalNumbers() {\n        double result = Calculator.add(0.1, 0.2);\n        assertEquals(0.3, result, 0.0001);\n    }\n\n    @Test\n    public void testAddWithZero() {\n        double result = Calculator.add(5.0, 0.0);\n        assertEquals(5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddSameNumbers() {\n        double result = Calculator.add(3.14, 3.14);\n        assertEquals(6.28, result, 0.0001);\n    }\n\n    @Test\n    public void testAddSmallNumbers() {\n        double result = Calculator.add(0.0001, 0.0002);\n        assertEquals(0.0003, result, 0.0001);\n    }\n\n    @Test\n    public void testAddMaxValues() {\n        double result = Calculator.add(Double.MAX_VALUE, Double.MAX_VALUE);\n        assertEquals(Double.POSITIVE_INFINITY, result, 0.0001);\n    }\n}"
-							// ];
-							
-							const formattedResponse = modelReply.map((test, index) => {
-								return `### 测试用例 ${index + 1}\n\n\`\`\`\n${test}\n\`\`\``;
-							}).join('\n\n---\n\n');
-							
-							panel.webview.postMessage({ 
-								command: 'reply', 
-								text: `已为您生成以下单元测试：\n\n${formattedResponse}`
-							});
+            // 在 activate() 函数中添加文件打开监听
+            context.subscriptions.push(
+                vscode.workspace.onDidOpenTextDocument((doc) => {
+                    if (panel && vscode.window.activeTextEditor?.viewColumn === vscode.ViewColumn.Beside) {
+                        vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+                        vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One });
+                    }
+                })
+            );
 
-							console.log("💬 模型回复内容2：", formattedResponse); // 加上这一行
-
-						}
-					});
-		
-					// panel.webview.postMessage({   //原来
-					//     command: 'reply',
-					//     text: modelResponse
-					// });
-
-					//修改
-					// 初始显示生成的测试用例
-					// const tests=[
-					// 	"import static org.junit.jupiter.api.Assertions.assertEquals;\nimport org.junit.jupiter.api.Test;\n\npublic class add_test1_Test {\n\n    @Test\n    public void testAddPositiveNumbers() {\n        double result = Calculator.add(5.5, 4.5);\n        assertEquals(10.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddNegativeNumbers() {\n        double result = Calculator.add(-3.2, -1.8);\n        assertEquals(-5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddMixedNumbers() {\n        double result = Calculator.add(7.3, -2.3);\n        assertEquals(5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddZero() {\n        double result = Calculator.add(0.0, 0.0);\n        assertEquals(0.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddLargeNumbers() {\n        double result = Calculator.add(1.0E10, 2.0E10);\n        assertEquals(3.0E10, result, 0.0001);\n    }\n}",
-					// 	"import static org.junit.jupiter.api.Assertions.assertEquals;\nimport org.junit.jupiter.api.Test;\n\npublic class add_test2_Test {\n\n    @Test\n    public void testAddDecimalNumbers() {\n        double result = Calculator.add(0.1, 0.2);\n        assertEquals(0.3, result, 0.0001);\n    }\n\n    @Test\n    public void testAddWithZero() {\n        double result = Calculator.add(5.0, 0.0);\n        assertEquals(5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddSameNumbers() {\n        double result = Calculator.add(3.14, 3.14);\n        assertEquals(6.28, result, 0.0001);\n    }\n\n    @Test\n    public void testAddSmallNumbers() {\n        double result = Calculator.add(0.0001, 0.0002);\n        assertEquals(0.0003, result, 0.0001);\n    }\n\n    @Test\n    public void testAddMaxValues() {\n        double result = Calculator.add(Double.MAX_VALUE, Double.MAX_VALUE);\n        assertEquals(Double.POSITIVE_INFINITY, result, 0.0001);\n    }\n}"
-					// ];
-					console.log("modelreply\n");
-					console.log(modelReply);
-					// const cleanedJson = modelReply.replace(/```json|```/g, '').trim();
-					// console.log(cleanedJson);
-        			// const { tests = [] } = JSON.parse(cleanedJson);
-					// console.log(tests);
-
-					const formattedTests = modelReply.map((test, index) => {
-						return `### 测试用例 ${index + 1}\n\n\`\`\`\n${test}\n\`\`\``;
-					}).join('\n\n---\n\n');
-
-					panel.webview.postMessage({
-						command: 'reply',
-						text: `已为您生成以下单元测试：\n\n${formattedTests}`
-					});
-
-					// 在 activate() 函数中添加文件打开监听
-					context.subscriptions.push(
-						vscode.workspace.onDidOpenTextDocument((doc) => {
-							// 如果右侧有我们的聊天面板，且用户尝试在右侧打开文件
-							if (panel && vscode.window.activeTextEditor?.viewColumn === vscode.ViewColumn.Beside) {
-								// 关闭当前文件（在右侧打开的）
-								vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-								// 重新在左侧打开
-								vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One });
-							}
-						})
-					);
-    
-
-				} catch (error) {
-					vscode.window.showErrorMessage(`生成失败: ${error.message}`);
-				}
-			});
-			
-		}),
-
-		//python测试命令
-        vscode.commands.registerCommand('my-chattester.runPythonTest', async () => {
-			// 显示命令已触发
-			vscode.window.showInformationMessage('Python测试生成命令已触发！');
-			
-			// 检查是否有活跃的编辑器且当前文件是Python文件
-			const editor = vscode.window.activeTextEditor;
-			if (!editor || editor.document.languageId !== 'python') {
-				vscode.window.showErrorMessage('请打开Python文件');
-				return;
-			}
-	
-			// 获取选中的代码
-			const selection = editor.selection;
-			const selectedText = editor.document.getText(selection).trim();
-			if (!selectedText) {
-				vscode.window.showErrorMessage('请先选中一个Python函数或方法代码段');
-				return;
-			}
-	
-	
-			// 显示进度通知
-			vscode.window.withProgress({
-				location: vscode.ProgressLocation.Notification,
-				title: `正在为函数生成Python测试...`,
-				cancellable: true
-			}, async (progress, token) => {
-				// 取消操作监听
-				token.onCancellationRequested(() => {
-					vscode.window.showInformationMessage('用户取消了操作');
-				});
-	
-				try {
-					let userQuestion="";
-					// 调用生成Python测试的函数
-					const modelReply =await generatePythonTest(editor.document.uri.fsPath, selectedText,userQuestion);
-					vscode.window.showInformationMessage(`成功 生成测试用例！`);
-
-					//修改
-					// 模型生成完毕后打开 Webview 聊天面板
-					// const panel = vscode.window.createWebviewPanel(
-					// 	'unitTestChat',
-					// 	'单元测试问答助手',
-					// 	vscode.ViewColumn.Two,
-					// 	{ enableScripts: true }
-					// );
-
-					const panel = createChatPanel();
-
-					panel.webview.html = getWebviewContent();
-
-					panel.webview.onDidReceiveMessage(async (message) => {
-						if (message.command === 'askModel') {
-							const userQuestion = message.text;
-							const modelReply = await generatePythonTest(editor.document.uri.fsPath, selectedText,userQuestion);
-							console.log("💬 模型回复内容：", modelReply); // 加上这一行
-							//panel.webview.postMessage({ command: 'reply', text: modelReply });  //原来
-
-							//修改
-							// 将测试用例数组转换为 Markdown 格式的字符串
-							// const tests=[
-							// 	"import static org.junit.jupiter.api.Assertions.assertEquals;\nimport org.junit.jupiter.api.Test;\n\npublic class add_test1_Test {\n\n    @Test\n    public void testAddPositiveNumbers() {\n        double result = Calculator.add(5.5, 4.5);\n        assertEquals(10.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddNegativeNumbers() {\n        double result = Calculator.add(-3.2, -1.8);\n        assertEquals(-5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddMixedNumbers() {\n        double result = Calculator.add(7.3, -2.3);\n        assertEquals(5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddZero() {\n        double result = Calculator.add(0.0, 0.0);\n        assertEquals(0.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddLargeNumbers() {\n        double result = Calculator.add(1.0E10, 2.0E10);\n        assertEquals(3.0E10, result, 0.0001);\n    }\n}",
-							// 	"import static org.junit.jupiter.api.Assertions.assertEquals;\nimport org.junit.jupiter.api.Test;\n\npublic class add_test2_Test {\n\n    @Test\n    public void testAddDecimalNumbers() {\n        double result = Calculator.add(0.1, 0.2);\n        assertEquals(0.3, result, 0.0001);\n    }\n\n    @Test\n    public void testAddWithZero() {\n        double result = Calculator.add(5.0, 0.0);\n        assertEquals(5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddSameNumbers() {\n        double result = Calculator.add(3.14, 3.14);\n        assertEquals(6.28, result, 0.0001);\n    }\n\n    @Test\n    public void testAddSmallNumbers() {\n        double result = Calculator.add(0.0001, 0.0002);\n        assertEquals(0.0003, result, 0.0001);\n    }\n\n    @Test\n    public void testAddMaxValues() {\n        double result = Calculator.add(Double.MAX_VALUE, Double.MAX_VALUE);\n        assertEquals(Double.POSITIVE_INFINITY, result, 0.0001);\n    }\n}"
-							// ];
-							
-
-							const formattedResponse = `### 单元测试代码\n\n\`\`\`python\n${modelReply}\n\`\`\``;
-							panel.webview.postMessage({ 
-								command: 'reply', 
-								text: `已为您生成以下单元测试：\n\n${formattedResponse}`
-							});
-							
-						}
-					});
-		
-					// panel.webview.postMessage({   //原来
-					//     command: 'reply',
-					//     text: modelResponse
-					// });
-
-					//修改
-					//初始显示生成的测试用例
-					const tests=[
-						"import static org.junit.jupiter.api.Assertions.assertEquals;\nimport org.junit.jupiter.api.Test;\n\npublic class add_test1_Test {\n\n    @Test\n    public void testAddPositiveNumbers() {\n        double result = Calculator.add(5.5, 4.5);\n        assertEquals(10.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddNegativeNumbers() {\n        double result = Calculator.add(-3.2, -1.8);\n        assertEquals(-5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddMixedNumbers() {\n        double result = Calculator.add(7.3, -2.3);\n        assertEquals(5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddZero() {\n        double result = Calculator.add(0.0, 0.0);\n        assertEquals(0.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddLargeNumbers() {\n        double result = Calculator.add(1.0E10, 2.0E10);\n        assertEquals(3.0E10, result, 0.0001);\n    }\n}",
-						"import static org.junit.jupiter.api.Assertions.assertEquals;\nimport org.junit.jupiter.api.Test;\n\npublic class add_test2_Test {\n\n    @Test\n    public void testAddDecimalNumbers() {\n        double result = Calculator.add(0.1, 0.2);\n        assertEquals(0.3, result, 0.0001);\n    }\n\n    @Test\n    public void testAddWithZero() {\n        double result = Calculator.add(5.0, 0.0);\n        assertEquals(5.0, result, 0.0001);\n    }\n\n    @Test\n    public void testAddSameNumbers() {\n        double result = Calculator.add(3.14, 3.14);\n        assertEquals(6.28, result, 0.0001);\n    }\n\n    @Test\n    public void testAddSmallNumbers() {\n        double result = Calculator.add(0.0001, 0.0002);\n        assertEquals(0.0003, result, 0.0001);\n    }\n\n    @Test\n    public void testAddMaxValues() {\n        double result = Calculator.add(Double.MAX_VALUE, Double.MAX_VALUE);\n        assertEquals(Double.POSITIVE_INFINITY, result, 0.0001);\n    }\n}"
-					];
-					console.log("modelreply\n");
-					console.log(modelReply);
-					// const cleanedJson = modelReply.replace(/```json|```/g, '').trim();
-					// console.log(cleanedJson);
-        			// const { tests = [] } = JSON.parse(cleanedJson);
-					// console.log(tests);
-
-					
-					const formattedResponse = `### 单元测试代码\n\n\`\`\`python\n${tests}\n\`\`\``;
-					panel.webview.postMessage({
-						command: 'reply',
-						text: `已为您生成以下单元测试：\n\n${formattedResponse}`
-					});
-    
-
-				} catch (error) {
-					vscode.window.showErrorMessage(`生成Python测试失败: ${error.message}`);
-				}
-			});
-		})
-	];
-	
-	// 批量注册
-	disposables.forEach(d => context.subscriptions.push(d));
+        } catch (error) {
+            vscode.window.showErrorMessage(`生成测试失败: ${error.message}`);
+        }
+    });
 }
+
 
 
 function getWebviewContent() {
