@@ -13,9 +13,38 @@ console.log('🔧 Extension loaded');
 /**
  * @param {vscode.ExtensionContext} context
  */
+
+let chatPanel = null; // 在文件顶部定义一个全局变量来保存 WebviewPanel
+
 function activate(context) {
+	
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "my-chattester" is now active!');
+	const createChatPanel = () => {
+        if (chatPanel) {
+            // 如果面板已存在，直接显示并返回
+            chatPanel.reveal(vscode.ViewColumn.Two);
+            return chatPanel;
+        }
+
+        // 创建新面板并固定在右侧
+        chatPanel = vscode.window.createWebviewPanel(
+            'unitTestChat',
+            '单元测试问答助手',
+            vscode.ViewColumn.Two,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true // ✅ 保持面板状态
+            }
+        );
+
+        // 面板关闭时清理引用
+        chatPanel.onDidDispose(() => {
+            chatPanel = null;
+        });
+
+        return chatPanel;
+    };
 
 	const disposables = [
 		//java测试命令
@@ -36,14 +65,13 @@ function activate(context) {
 				vscode.window.showErrorMessage('请先选中一个 Java 方法代码段');
 				return;
 			}
-			// 简单提取方法名
-			const methodNameMatch = selectedText.match(/(?:public|private|protected)?\s+\w[\w<>\[\]]*\s+(\w+)\s*\(.*?\)/);
-			const methodSignature = methodNameMatch ? methodNameMatch[1] : 'UnknownMethod';
+
 			
 			//进度反馈与任务执行
 			vscode.window.withProgress({
 				location: vscode.ProgressLocation.Notification,
-				title: `正在为 ${methodSignature} 生成测试...`,
+				//title: `正在为 ${methodSignature} 生成测试...`,
+				title: `正在为生成测试...`,
 				cancellable: true
 			}, async (progress, token) => {
 				// 取消操作监听
@@ -53,16 +81,18 @@ function activate(context) {
 	
 				try {
 					let userQuestion="";
-					const modelReply=await generateTest(editor.document.uri.fsPath, methodSignature,userQuestion);
+					const modelReply=await generateTest(editor.document.uri.fsPath, selectedText,userQuestion);  //
 					
 					
 					// 模型生成完毕后打开 Webview 聊天面板
-					const panel = vscode.window.createWebviewPanel(
-						'unitTestChat',
-						'单元测试问答助手',
-						vscode.ViewColumn.Two,
-						{ enableScripts: true }
-					);
+					// const panel = vscode.window.createWebviewPanel(
+					// 	'unitTestChat',
+					// 	'单元测试问答助手',
+					// 	vscode.ViewColumn.Two,
+					// 	{ enableScripts: true }
+					// );
+					const panel = createChatPanel();
+
 
 					panel.webview.html = getWebviewContent();
 
@@ -70,7 +100,7 @@ function activate(context) {
 						console.log("收到消息：", message);
 						if (message.command === 'askModel') {
 							const userQuestion = message.text;
-							const modelReply = await generateTest(editor.document.uri.fsPath, methodSignature,userQuestion);
+							const modelReply = await generateTest(editor.document.uri.fsPath, selectedText,userQuestion);
 							console.log("💬 模型回复内容：", modelReply); // 加上这一行
 							//panel.webview.postMessage({ command: 'reply', text: modelReply });  //原来
 
@@ -121,12 +151,26 @@ function activate(context) {
 						command: 'reply',
 						text: `已为您生成以下单元测试：\n\n${formattedTests}`
 					});
+
+					// 在 activate() 函数中添加文件打开监听
+					context.subscriptions.push(
+						vscode.workspace.onDidOpenTextDocument((doc) => {
+							// 如果右侧有我们的聊天面板，且用户尝试在右侧打开文件
+							if (panel && vscode.window.activeTextEditor?.viewColumn === vscode.ViewColumn.Beside) {
+								// 关闭当前文件（在右侧打开的）
+								vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+								// 重新在左侧打开
+								vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One });
+							}
+						})
+					);
     
 
 				} catch (error) {
 					vscode.window.showErrorMessage(`生成失败: ${error.message}`);
 				}
 			});
+			
 		}),
 
 		//python测试命令
@@ -149,14 +193,11 @@ function activate(context) {
 				return;
 			}
 	
-			// 提取函数/方法名
-			const functionNameMatch = selectedText.match(/def\s+(\w+)\s*\(.*?\)/);
-			const functionName = functionNameMatch ? functionNameMatch[1] : '未知函数';
 	
 			// 显示进度通知
 			vscode.window.withProgress({
 				location: vscode.ProgressLocation.Notification,
-				title: `正在为函数 ${functionName} 生成Python测试...`,
+				title: `正在为函数生成Python测试...`,
 				cancellable: true
 			}, async (progress, token) => {
 				// 取消操作监听
@@ -167,24 +208,26 @@ function activate(context) {
 				try {
 					let userQuestion="";
 					// 调用生成Python测试的函数
-					const modelReply =await generatePythonTest(editor.document.uri.fsPath, functionName,userQuestion);
-					vscode.window.showInformationMessage(`成功为 ${functionName} 生成测试用例！`);
+					const modelReply =await generatePythonTest(editor.document.uri.fsPath, selectedText,userQuestion);
+					vscode.window.showInformationMessage(`成功 生成测试用例！`);
 
 					//修改
 					// 模型生成完毕后打开 Webview 聊天面板
-					const panel = vscode.window.createWebviewPanel(
-						'unitTestChat',
-						'单元测试问答助手',
-						vscode.ViewColumn.Two,
-						{ enableScripts: true }
-					);
+					// const panel = vscode.window.createWebviewPanel(
+					// 	'unitTestChat',
+					// 	'单元测试问答助手',
+					// 	vscode.ViewColumn.Two,
+					// 	{ enableScripts: true }
+					// );
+
+					const panel = createChatPanel();
 
 					panel.webview.html = getWebviewContent();
 
 					panel.webview.onDidReceiveMessage(async (message) => {
 						if (message.command === 'askModel') {
 							const userQuestion = message.text;
-							const modelReply = await generatePythonTest(editor.document.uri.fsPath, functionName,userQuestion);
+							const modelReply = await generatePythonTest(editor.document.uri.fsPath, selectedText,userQuestion);
 							console.log("💬 模型回复内容：", modelReply); // 加上这一行
 							//panel.webview.postMessage({ command: 'reply', text: modelReply });  //原来
 

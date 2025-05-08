@@ -7,7 +7,10 @@ const { writeTestFiles } = require('./write-to-file');
 const { processGeneratedTestFiles } = require('./javafile-compile');
 
 
-async function generateTest(filePath, targetMethod,userQuestion) {
+async function generateTest(filePath, selectedText,userQuestion) {
+    // 简单提取方法名
+	const methodNameMatch = selectedText.match(/(?:public|private|protected)?\s+\w[\w<>\[\]]*\s+(\w+)\s*\(.*?\)/);
+	const targetMethod = methodNameMatch ? methodNameMatch[1] : 'UnknownMethod';     //用到的是原版本的签名
     const TestOutputPrompt=`
         Please generate multiple Java test files in a pure JSON-formatted string. These test files are stored in a 'List'. The output JSON string contains a 'tests' object, which is a list. Each element in the list represents a Java test file, and there should be no other responses.
 
