@@ -4,7 +4,7 @@
   "description": "a testing plugin based on LLM",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.99.0"
+    "vscode": "^1.99.3"
   },
   "categories": [
     "Other"
@@ -22,6 +22,12 @@
         "command": "my-chattester.runPythonTest",
         "title": "Generate Python Test",
         "category": "Testing"
+      },
+      {
+        "command": "my-chattester.configure",
+        "title": "Set Your Configure",
+        "category": "Testing"
+
       }
     ],
     "menus": {
@@ -34,6 +40,10 @@
         {
           "command": "my-chattester.runPythonTest",
           "when": "editorLangId == python",
+          "group": "navigation"
+        },
+        {
+          "command": "my-chattester.configure",
           "group": "navigation"
         }
       ]
@@ -68,7 +78,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
-    "@types/vscode": "^1.99.0",
+    "@types/vscode": "^1.99.3",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "eslint": "^9.23.0"

@@ -15,30 +15,104 @@ console.log('🔧 Extension loaded');
  * @param {vscode.ExtensionContext} context
  */
 
+let configPanel = null; // 在文件顶部定义一个全局变量来保存配置面板
 let chatPanel = null; // 在文件顶部定义一个全局变量来保存 WebviewPanel
 let Back_require=null;   //后端需要的json数据
+// let chatHtmlCache = ''; // 缓存chat页面内容
 
-const createChatPanel = () => {
-    if (chatPanel) {
-        // 如果面板已存在，直接显示并返回
-        chatPanel.reveal(vscode.ViewColumn.Two);
-        return chatPanel;
+//配置面板需要 context 来保存/读取配置（持久化需求）
+async function showConfigWebview(context) {
+    
+    // if (configPanel) {
+    //     configPanel.reveal(vscode.ViewColumn.Two);
+    //     return configPanel;
+    // }
+    // 如果面板不存在
+    if (!configPanel) 
+    {
+        // 创建新面板并固定在右侧
+        configPanel = vscode.window.createWebviewPanel(
+            'configPanel',
+            '配置大模型信息',
+            vscode.ViewColumn.Two,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true
+            }
+        );
+
+        const fields = Object.keys(getAIInfo()); // 获取字段列表
+        // .get('aiConfig') 尝试读取键为 'aiConfig' 的值。
+        // 如果之前调用过 context.globalState.update('aiConfig', {...}) 保存过数据，这里会返回保存的对象；否则返回 undefined。
+        const savedConfig = context.globalState.get('aiConfig') || {};
+
+        configPanel.webview.html = getConfigHtml(savedConfig, fields);
+
+        configPanel.webview.onDidReceiveMessage(async message => {
+            if (message.command === 'saveConfig') {
+                await context.globalState.update('aiConfig', message.data);
+                vscode.window.showInformationMessage('配置已保存');
+            } else if (message.command === 'gotoChat') {
+                // configPanel.hide();
+                // const chat = showChatWebview();
+                // chat.reveal(vscode.ViewColumn.Two);
+                // configPanel.dispose();
+                // await showChatWebview();
+                if (chatPanel) {
+                    chatPanel.reveal(vscode.ViewColumn.Two);
+                } else {
+                    // showChatWebview(context).reveal(vscode.ViewColumn.Two);
+                    const chat = showChatWebview();
+                    chat.reveal(vscode.ViewColumn.Two);
+                }
+            }
+        });
+
+        // 面板关闭时清理引用
+        configPanel.onDidDispose(() => {
+            configPanel = null;
+        });
     }
-    // 创建新面板并固定在右侧
-    chatPanel = vscode.window.createWebviewPanel(
-        'unitTestChat',
-        '单元测试问答助手',
-        vscode.ViewColumn.Two,
-        {
-            enableScripts: true,
-            retainContextWhenHidden: true // ✅ 保持面板状态
-        }
-    );
-    // 面板关闭时清理引用
-    chatPanel.onDidDispose(() => {
-        chatPanel = null;
-    });
+    configPanel.reveal(vscode.ViewColumn.Two);
+    return configPanel;
 
+ 
+
+    
+
+
+}
+
+const showChatWebview = () => {
+    // if (configPanel) {
+    //     configPanel.dispose();
+    // }
+    // if (chatPanel) {
+    //     chatPanel.reveal(vscode.ViewColumn.Two);
+    //     return chatPanel;
+    // }
+    if (!chatPanel) 
+    {
+        // 创建新面板并固定在右侧
+        chatPanel = vscode.window.createWebviewPanel(
+            'unitTestChat',
+            '单元测试问答助手',
+            vscode.ViewColumn.Two,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true //保持面板状态
+            }
+        );
+
+        chatPanel.webview.html = getWebviewContent();
+        // chatPanel.webview.html = chatHtmlCache || getWebviewContent();
+
+        //面板关闭时清理引用
+        chatPanel.onDidDispose(() => {
+            chatPanel = null;
+        });
+    }
+    chatPanel.reveal(vscode.ViewColumn.Two);
     return chatPanel;
 };
 
@@ -48,6 +122,9 @@ function activate(context) {
 	//TODO：前端写一个界面让用户选择用哪种方法
 
 	let a=getAIInfo();  //获取后端给的json数据（后端需要的项目及解释）
+
+    
+    
 
 	//a={
 	// 	"ai": "使用的AI模型",  
@@ -67,16 +144,44 @@ function activate(context) {
 
 
     console.log('Congratulations, your extension "my-chattester" is now active!');
+
+    const config = context.globalState.get('aiConfig');
+    if (!config) {
+        vscode.window.showInformationMessage("首次使用，请先进行配置。");
+        showConfigWebview(context);
+        
+    }
     
     const disposables = [
         // Java测试命令
         vscode.commands.registerCommand('my-chattester.runJavaTest', async () => {
+            // await handleTestGeneration(context, generateTest, Back_require);
+            const config = context.globalState.get('aiConfig');
+            if (!config) {
+                vscode.window.showWarningMessage('尚未配置，请先配置大模型参数');
+                await showConfigWebview(context);
+                return;
+            }
+            Back_require = config;
             await handleTestGeneration(context, generateTest, Back_require);
         }),
         
         // Python测试命令
         vscode.commands.registerCommand('my-chattester.runPythonTest', async () => {
-            await handleTestGeneration(context,  generatePythonTest,Back_require);
+            // await handleTestGeneration(context,  generatePythonTest,Back_require);
+            const config = context.globalState.get('aiConfig');
+            if (!config) {
+                vscode.window.showWarningMessage('尚未配置，请先配置大模型参数');
+                await showConfigWebview(context);
+                return;
+            }
+            Back_require = config;
+            await handleTestGeneration(context, generatePythonTest, Back_require);
+        }),
+
+        // 进入配置界面
+        vscode.commands.registerCommand('my-chattester.configure', async () => {
+            await showConfigWebview(context);
         })
     ];
     
@@ -121,7 +226,7 @@ async function handleTestGeneration(context, generatorFunction,Back_require) {
             const modelReply = await generatorFunction(editor.document.uri.fsPath, selectedText, userQuestion, Back_require);
             vscode.window.showInformationMessage(`成功生成测试用例！`);
 
-            const panel = createChatPanel();
+            const panel = showChatWebview();
             panel.webview.html = getWebviewContent();
 
             panel.webview.onDidReceiveMessage(async (message) => {
@@ -138,6 +243,18 @@ async function handleTestGeneration(context, generatorFunction,Back_require) {
                         command: 'reply', 
                         text: `已为您生成以下单元测试：\n\n${formattedResponse}`
                     });
+                }else if (message.command === 'gotoConfig') {
+                    // await showConfigWebview(context);
+                    if (configPanel) {
+                        configPanel.reveal(vscode.ViewColumn.Two);
+                    } else {
+                        await showConfigWebview(context);
+                    }
+                    // panel.hide();
+                    // // panel.dispose();
+                    // // await showConfigWebview(context);
+                    // const config = await showConfigWebview(context);
+                    // config.reveal(vscode.ViewColumn.Two);
                 }
             });
 
@@ -158,6 +275,12 @@ async function handleTestGeneration(context, generatorFunction,Back_require) {
                         vscode.commands.executeCommand('workbench.action.closeActiveEditor');
                         vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One });
                     }
+                })
+            );
+
+            context.subscriptions.push(
+                vscode.commands.registerCommand('my-chattester.configureModel', () => {
+                    showConfigWebview(context);
                 })
             );
 
@@ -263,6 +386,7 @@ function getWebviewContent() {
     <div id="copy-notification" class="copy-notification">已复制到剪贴板</div>
     <input type="text" id="input" placeholder="输入你的问题...">
     <button onclick="send()">发送</button>
+    <button onclick="gotoConfig()">修改配置</button>
     <script>
         const vscode = acquireVsCodeApi();
         const chat = document.getElementById('chat');
@@ -323,7 +447,13 @@ function getWebviewContent() {
 			console.log("发出信息");
 			console.log(text);
             vscode.postMessage({ command: 'askModel', text });
+            // vscode.postMessage({ command: 'saveState', state: document.getElementById('chat').innerHTML });
             input.value = '';
+        }
+
+        //  跳转到配置界面  
+        function gotoConfig() {
+            vscode.postMessage({ command: 'gotoConfig' });
         }
         
         window.addEventListener('message', event => {
@@ -347,6 +477,52 @@ function getWebviewContent() {
     </script>
 </body>
 </html>`;
+}
+
+function getConfigHtml(config,fields) {
+    const inputFields = fields.map(key => `
+        <div>
+            <label>${key}:</label><br>
+            <input id="${key}" value="${config[key] || ''}" placeholder="请输入 ${key}" />
+        </div>
+    `).join('\n');
+    return `
+    <!DOCTYPE html>
+    <html lang="zh">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: sans-serif; padding: 20px; }
+            input, textarea { width: 75%; margin: 10px 0; padding: 8px; }
+            button { padding: 8px 12px; }
+        </style>
+    </head>
+    <body>
+        <h2>配置大模型信息</h2>
+
+
+        ${inputFields}
+        <button onclick="save()">保存配置</button>
+        <button onclick="gotoChat()">进入问答助手</button>
+        <script>
+            const vscode = acquireVsCodeApi();
+            function save() {
+                // const config = {
+                //     ai: document.getElementById('ai').value,
+                //     apikey: document.getElementById('apikey').value,
+                //     'jar包': document.getElementById('jar').value
+                // };
+                const data = {};
+                ${fields.map(key => `data["${key}"] = document.getElementById("${key}").value;`).join('\n')}
+                vscode.postMessage({ command: 'saveConfig', data: config });
+            }
+            function gotoChat() {
+                vscode.postMessage({ command: 'gotoChat' });
+            }
+        </script>
+        
+    </body>
+    </html>`;
 }
 
 
