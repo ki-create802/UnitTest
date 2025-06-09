@@ -27,7 +27,6 @@
         "command": "my-chattester.configure",
         "title": "Set Your Configure",
         "category": "Testing"
-
       }
     ],
     "menus": {
@@ -85,6 +84,8 @@
   },
   "dependencies": {
     "axios": "^1.8.4",
-    "openai": "^4.91.1"
+    "node-tree-sitter": "^0.0.1",
+    "openai": "^4.91.1",
+    "tree-sitter-python": "^0.23.6"
   }
 }
