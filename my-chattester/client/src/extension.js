@@ -4,6 +4,7 @@ const vscode = require('vscode');
 const { generateTest } = require('./javaGenerator');
 const { generatePythonTest } = require('./pyGenerator');
 const { getAIInfo }=require('./javaGenerator')
+// const { getPyAIInfo }=require('./pyGenerator')
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -278,11 +279,11 @@ async function handleTestGeneration(context, generatorFunction,Back_require) {
                 })
             );
 
-            context.subscriptions.push(
-                vscode.commands.registerCommand('my-chattester.configureModel', () => {
-                    showConfigWebview(context);
-                })
-            );
+            // context.subscriptions.push(
+            //     vscode.commands.registerCommand('my-chattester.configureModel', () => {
+            //         showConfigWebview(context);
+            //     })
+            // );
 
         } catch (error) {
             vscode.window.showErrorMessage(`生成测试失败: ${error.message}`);
@@ -479,13 +480,72 @@ function getWebviewContent() {
 </html>`;
 }
 
-function getConfigHtml(config,fields) {
+// function getConfigHtml(config,fields) {
+//     const inputFields = fields.map(key => `
+//         <div>
+//             <label>${key}:</label><br>
+//             <input id="${key}" value="${config[key] || ''}" placeholder="请输入 ${key}" />
+//         </div>
+//     `).join('\n');
+//     return `
+//     <!DOCTYPE html>
+//     <html lang="zh">
+//     <head>
+//         <meta charset="UTF-8">
+//         <style>
+//             body { font-family: sans-serif; padding: 20px; }
+//             input, textarea { width: 75%; margin: 10px 0; padding: 8px; }
+//             button { padding: 8px 12px; }
+//             .method-selector { margin-top: 20px; border-top: 1px solid #eee; padding-top: 20px; 
+//         </style>
+//     </head>
+//     <body>
+//         <h2>配置大模型信息</h2>
+
+
+//         ${inputFields}
+
+//         <div class="method-selector">
+//             <h3>选择生成方法</h3>
+//             <select id="generationMethod">
+//                 <option value="generateTest">Java测试生成</option>
+//                 <option value="generatePythonTest">Python测试生成</option>
+//             </select>
+//         </div>
+
+//         <button onclick="save()">保存配置</button>
+//         <button onclick="gotoChat()">进入问答助手</button>
+//         <script>
+//             const vscode = acquireVsCodeApi();
+//             function save() {
+//                 // const config = {
+//                 //     ai: document.getElementById('ai').value,
+//                 //     apikey: document.getElementById('apikey').value,
+//                 //     'jar包': document.getElementById('jar').value
+//                 // };
+//                 const data = {};
+//                 ${fields.map(key => `data["${key}"] = document.getElementById("${key}").value;`).join('\n')}
+//                 vscode.postMessage({ command: 'saveConfig', data: data });
+//             }
+//             function gotoChat() {
+//                 vscode.postMessage({ command: 'gotoChat' });
+//             }
+//         </script>
+        
+//     </body>
+//     </html>`;
+// }
+
+// 修改后的 getConfigHtml 函数
+
+function getConfigHtml(config, fields) {
     const inputFields = fields.map(key => `
         <div>
             <label>${key}:</label><br>
             <input id="${key}" value="${config[key] || ''}" placeholder="请输入 ${key}" />
         </div>
     `).join('\n');
+    
     return `
     <!DOCTYPE html>
     <html lang="zh">
@@ -493,39 +553,59 @@ function getConfigHtml(config,fields) {
         <meta charset="UTF-8">
         <style>
             body { font-family: sans-serif; padding: 20px; }
-            input, textarea { width: 75%; margin: 10px 0; padding: 8px; }
-            button { padding: 8px 12px; }
+            input, textarea, select { width: 75%; margin: 10px 0; padding: 8px; }
+            button { padding: 8px 12px; margin-right: 10px; }
+            .method-selector { width: 75%; padding: 8px;  }
         </style>
     </head>
     <body>
         <h2>配置大模型信息</h2>
 
-
         ${inputFields}
-        <button onclick="save()">保存配置</button>
-        <button onclick="gotoChat()">进入问答助手</button>
+        选择生成方法:
+        <div class="method-selector">
+            <select id="generationMethod">
+                <option value="generateTest">Java:方法</option>
+                <option value="generatePythonTest">Python:symprompt</option>
+            </select>
+        </div>
+
+        <div style="margin-top: 30px;">
+            <button onclick="save()">保存配置</button>
+            <button onclick="gotoChat()">进入问答助手</button>
+        </div>
+        
         <script>
             const vscode = acquireVsCodeApi();
+            
+            // 从本地存储加载上次选择的方法（如果有）
+            const savedMethod = localStorage.getItem('selectedMethod');
+            if (savedMethod) {
+                document.getElementById('generationMethod').value = savedMethod;
+            }
+            
             function save() {
-                // const config = {
-                //     ai: document.getElementById('ai').value,
-                //     apikey: document.getElementById('apikey').value,
-                //     'jar包': document.getElementById('jar').value
-                // };
                 const data = {};
                 ${fields.map(key => `data["${key}"] = document.getElementById("${key}").value;`).join('\n')}
-                vscode.postMessage({ command: 'saveConfig', data: config });
+                
+                // 保存选择的方法
+                const selectedMethod = document.getElementById('generationMethod').value;
+                data.generationMethod = selectedMethod;
+                localStorage.setItem('selectedMethod', selectedMethod);
+                
+                vscode.postMessage({ 
+                    command: 'saveConfig', 
+                    data: data 
+                });
             }
+            
             function gotoChat() {
                 vscode.postMessage({ command: 'gotoChat' });
             }
         </script>
-        
     </body>
     </html>`;
 }
-
-
 // This method is called when your extension is deactivated
 function deactivate() {}
 

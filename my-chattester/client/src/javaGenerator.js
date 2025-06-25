@@ -10,7 +10,8 @@ function getAIInfo() {
     return {
       "ai": "DeepSeek Chat",  // 我使用的AI模型
       "apikey": "这里需填写你的apikey",  // 请在此处填写您的API密钥
-      "jar包": "相关配置"  // 相关配置信息
+    //   "jar包": "相关配置",  // 相关配置信息
+      "方法名": "请输入"  // 生成的测试代码语言
     };
 }
   
