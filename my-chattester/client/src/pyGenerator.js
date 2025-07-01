@@ -12,8 +12,8 @@ function getAIInfo() {
   return {
     ai: 'DeepSeek Chat',
     apikey: '这里需填写你的apikey',
-    jar包: '相关配置',
-    语言: 'Python',
+    // jar包: '相关配置',
+    // 语言: 'Python',
     方法名: 'symprompt'
   };
 }
@@ -49,6 +49,11 @@ async function generatePythonTest(pythonFilePath, selectedText, userQuestion, Ba
     console.log(`\n===================================================\n`);
 
     const prompt = `函数上下文:\n${contextOutput}\n测试需要包含的路径:\n${pathOutput}\n你是一个专业的Python语言工程师，请根据以上信息生成规范的、没有编译错误的可运行的Python测试代码，用Markdown代码块格式，不要包含任何代码块标识（如 \`\`\`python 和 \`\`\`）以及其他说明性文字。` + userQuestion;
+
+    // === 打印调试信息：查看完整的 prompt ===
+    console.log("\n===== 调试：完整的 prompt 内容 =====");
+    console.log(prompt);  // 打印 prompt 内容
+    console.log("===================================\n");
 
     // === 调用大模型生成测试代码 ===
     console.log(`\n===== 生成测试代码中: ${targetMethod} =====`);

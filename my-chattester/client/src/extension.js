@@ -565,8 +565,8 @@ function getConfigHtml(config, fields) {
         选择生成方法:
         <div class="method-selector">
             <select id="generationMethod">
-                <option value="generateTest">Java:方法</option>
-                <option value="generatePythonTest">Python:symprompt</option>
+                <option value="generateTest">Java:ChatTester</option>
+                <option value="generatePythonTest">Python:SymPrompt</option>
             </select>
         </div>
 
